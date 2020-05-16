@@ -1,0 +1,1 @@
+Bidirectional LSTM with dropout to train sentiment analysis in tensorflow 
