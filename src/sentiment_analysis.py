@@ -91,9 +91,9 @@ def reverse_token(token):
 
 print("去掉词向量中没有的词：",reverse_token(token=train_tokens[2]))
 
-#加载词向量中前30000个
+#加载词向量中前50000个
 embedding_dim=300
-num_words=30000
+num_words=50000
 embedding_matrix=np.zeros((num_words,embedding_dim))
 
 for i in range(num_words):
@@ -152,7 +152,7 @@ callbacks=[check_point,early_stop,lr_reduce]
 model.fit(x_train,y_train,batch_size=128,epochs=20,callbacks=callbacks,validation_split=0.1)
 
 #保存模型
-model.save_weights('../model/sm.model')
+model.save('../model/model.h5')
 
 #evaluate
 result=model.evaluate(x_test,y_test)
@@ -207,7 +207,7 @@ pred=[1 if i>0.5  else 0 for i in pred]
 pred=np.array(pred)
 
 cls=np.where(pred !=y_test)
-cls[0]
+print(cls[0])
 
 index=27
 print(reverse_token(x_test[index]))
