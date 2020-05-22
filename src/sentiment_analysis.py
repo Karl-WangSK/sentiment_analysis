@@ -1,22 +1,19 @@
 #!/usr/bin/env python
 #coding: utf-8
 
- 
-
 import jieba
 import re 
 import numpy as np
 from gensim.models import KeyedVectors
+from src.feature_extract import featur_extract
 import warnings
 warnings.filterwarnings("ignore")
 
 
- 
 
 ##知乎词向量
 cn_model=KeyedVectors.load_word2vec_format('../embedding/sgns.zhihu.bigram',
                                           binary=False)
-
 print(cn_model['NLP'])
 print(cn_model.most_similar(positive='卧槽'))
 
@@ -25,9 +22,7 @@ pos=os.listdir('../pos')
 neg=os.listdir('../neg')
 ##样本数量
 print("负样本数量:",len(neg))
-
 print('len:',str(len(pos)+len(neg)))
-
 
 ##训练数据集
 train_texts_orig=[]
@@ -51,8 +46,6 @@ from tensorflow.keras.optimizers import Adam,RMSprop
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint,TensorBoard,ReduceLROnPlateau
-import tensorflow as tf
-
 
 #分词后的文本集
 train_tokens=[]
@@ -78,7 +71,6 @@ print(num_tokens.max())
 print('文本的正态分布2个方差内的长度:',int(num_tokens.mean()+2*np.std(num_tokens)))
 print("覆盖了多少",np.sum(num_tokens<=236)/num_tokens.size)
 
-
 #去掉词向量中没有的词
 def reverse_token(token):
     text=''
@@ -91,37 +83,32 @@ def reverse_token(token):
 
 print("去掉词向量中没有的词：",reverse_token(token=train_tokens[2]))
 
-#加载词向量中前50000个
+"""
+加载词向量中前50000个  
+形成embedding matrix [num_words，embedding_dim]
+"""
 embedding_dim=300
 num_words=50000
 embedding_matrix=np.zeros((num_words,embedding_dim))
-
 for i in range(num_words):
     embedding_matrix[i:]=cn_model[cn_model.index2word[i]]
-
-
 print(embedding_matrix.shape)
-
 np.sum(embedding_matrix[333]==cn_model[cn_model.index2word[333]])
 
-
-
+#padding
 train_pad=pad_sequences(train_tokens,maxlen=236,padding='pre',truncating='post')
 train_pad[train_pad > num_words]=0
 print(train_pad[33])
 
 train_target=np.concatenate((np.ones(2000),np.zeros(2000)))
 
-
+#切分训练数据和测试数据
 from sklearn.model_selection import  train_test_split
 x_train,x_test,y_train,y_test=train_test_split(train_pad,train_target,test_size=0.1,random_state=123)
-
 print(reverse_token(x_train[123]))
 print(y_train[123])
 
-
 #开始训练
-
 model=Sequential()
 model.add(Embedding(input_dim=num_words,output_dim=300,weights=[embedding_matrix],input_length=236))
 model.add(Bidirectional(LSTM(units=32, return_sequences=True,dropout=0.2)))
@@ -131,12 +118,11 @@ model.add(Dense(1, activation='sigmoid'))
 adam=Adam(learning_rate=1e-3)
 ## 编译
 model.compile(optimizer=adam,loss="binary_crossentropy",metrics=['accuracy'])
-
+#model的summary
 print(model.summary())
 ##checkpoint
 path_checkpoint='../checkpoint/sentiment_checkpoints'
 check_point=ModelCheckpoint(filepath=path_checkpoint,monitor='val_loss',save_weights_only=True,save_best_only=True)
-
  #
  # try:
  #     model.load_weights(path_checkpoint)
@@ -147,40 +133,13 @@ check_point=ModelCheckpoint(filepath=path_checkpoint,monitor='val_loss',save_wei
 early_stop=EarlyStopping(monitor='val_loss',patience=3,verbose=1)
 lr_reduce=ReduceLROnPlateau(monitor='val_loss',factor=0.1,min_lr=1e-5)
 callbacks=[check_point,early_stop,lr_reduce]
-
 ##训练模型
 model.fit(x_train,y_train,batch_size=128,epochs=20,callbacks=callbacks,validation_split=0.1)
-
 #保存模型
 model.save('../model/model.h5')
-
 #evaluate
 result=model.evaluate(x_test,y_test)
 print(result[1])
-
-
-
-#预测模型function
-def predict_sentiment(text):
-    print(text)
-     #去标点
-    text = re.sub("[\s+\.\!\/_,$%^*(+\"\']+|[+——！，。？、~@￥%……&*（）]+", "",text)
-    text=jieba.cut(text)
-    text_list=[i for i in text]
-    for index,word in enumerate(text_list):
-        try:
-            text_list[index]=cn_model.vocab[word].index
-        except KeyError:
-            text_list[index]=0
-    text_pad=pad_sequences([text_list],maxlen=236,truncating='post')
-    text_pad[text_pad>num_words]=0
-    pred=model.predict(text_pad)
-    coef=pred[0][0]
-    if coef >= 0.5:
-        print('是一例正面评价','output=%.2f'%coef)
-    else:
-        print('是一例负面评价','output=%.2f'%coef)
-        
 
 #测试数据
 test_list = [
@@ -195,20 +154,20 @@ test_list = [
     '因为过节所以要我临时加钱，比团购的价格贵'
 ]
 for text in test_list:
-    predict_sentiment(text)
+    featur_extract.predict_sentiment(text,cn_model=cn_model,model=model)
 
 text='酒店周边环境一般酒店内设施不错感觉还挺新价格也尚可接受'
-predict_sentiment(text)
+featur_extract.predict_sentiment(text,cn_model=cn_model,model=model)
 
 
-
+#预测测试数据
 pred=model.predict(x_test)
 pred=[1 if i>0.5  else 0 for i in pred]
 pred=np.array(pred)
-
+#打印预测错的
 cls=np.where(pred !=y_test)
 print(cls[0])
-
+#测试集中 某个index在预测值和实际值
 index=27
 print(reverse_token(x_test[index]))
 print(pred[index])
