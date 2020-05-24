@@ -43,7 +43,6 @@ print(len(train_texts_orig))
 from tensorflow.keras.layers import LSTM,GRU,Bidirectional,Embedding,Dense
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam,RMSprop
-from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint,TensorBoard,ReduceLROnPlateau
 
