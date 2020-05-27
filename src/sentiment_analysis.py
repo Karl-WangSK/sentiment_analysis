@@ -171,8 +171,3 @@ index=27
 print(reverse_token(x_test[index]))
 print(pred[index])
 print(y_test[index])
-
-
-
-
-
