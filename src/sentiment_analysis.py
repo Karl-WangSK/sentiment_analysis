@@ -158,7 +158,6 @@ for text in test_list:
 text='酒店周边环境一般酒店内设施不错感觉还挺新价格也尚可接受'
 featur_extract.predict_sentiment(text,cn_model=cn_model,model=model)
 
-
 #预测测试数据
 pred=model.predict(x_test)
 pred=[1 if i>0.5  else 0 for i in pred]
