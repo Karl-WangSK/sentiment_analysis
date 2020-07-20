@@ -109,9 +109,9 @@ print(y_train[123])
 
 #开始训练
 model=Sequential()
-model.add(Embedding(input_dim=num_words,output_dim=300,weights=[embedding_matrix],input_length=236))
-model.add(Bidirectional(LSTM(units=32, return_sequences=True,dropout=0.2)))
-model.add(LSTM(units=16, return_sequences=False,dropout=0.4))
+model.add(Embedding(input_dim=num_words,output_dim=300,weights=[embedding_matrix],input_length=236,mask_zero=True,trainable=True))
+model.add(Bidirectional(LSTM(units=32, return_sequences=True)))
+model.add(LSTM(units=16, return_sequences=False))
 model.add(Dense(1, activation='sigmoid'))
 ## Adam优化器
 adam=Adam(learning_rate=1e-3)

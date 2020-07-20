@@ -7,7 +7,6 @@ from tensorflow.keras.models import load_model
 import numpy as np
 import os
 
-
 """
 num_words: number of embedding words
 embedding_matrix: embedding_dimension
