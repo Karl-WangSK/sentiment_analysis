@@ -44,6 +44,7 @@ if __name__ == '__main__':
     cn_model=featur_extract.embedding_words()
     #加载模型
     model = load_model(filepath=path)
+
     # 测试数据
     test_list = [
         '酒店设施不是新的，服务态度很不好',
