@@ -2,7 +2,7 @@
 from tensorflow.keras.layers import LSTM,Bidirectional,Embedding,Dense
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
-from  src.feature_extract import featur_extract
+from  BiLSTM.feature_extract import featur_extract
 from tensorflow.keras.models import load_model
 import numpy as np
 import os

@@ -5,7 +5,7 @@ import jieba
 import re 
 import numpy as np
 from gensim.models import KeyedVectors
-from src.feature_extract import featur_extract
+from BiLSTM.feature_extract import featur_extract
 import warnings
 warnings.filterwarnings("ignore")
 
