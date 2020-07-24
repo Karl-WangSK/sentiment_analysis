@@ -10,16 +10,24 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.losses import categorical_crossentropy
 
 
-gConfig = getConfig.get_config()
 
-
+"""
+FFN:前馈神经网络
+"""
 def point_wise_feed_forward_network(diff, d_model):
     return Sequential(
         [Dense(diff, activation='relu'),
          Dense(d_model)]
     )
 
-
+"""
+MultiHeadAttention：
+    1、对Q、K、V 拆分成多头
+    2、Q、K、V scaled点积相乘  
+        Return:  (batch_size,num_heads,seq_len_k,d_model)
+    3、转置后合并成 三维   
+        Return: (batch_size, seq_len_k, d_model)
+"""
 class MultiHeadAttention(Layer):
     def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
@@ -47,6 +55,10 @@ class MultiHeadAttention(Layer):
         dk = tf.cast(tf.shape(k)[-1], tf.float32)
         scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
+        """
+        padding之后为0的，但这样做得话，softmax计算就会被影响，e^0=1也就是有值，这样就会影响结果，这并不是我们希望看到得，
+        因此在计算得时候我们需要把他们mask起来，填充一个负无穷（-1e9这样得数值），这样计算就可以为0了，等于把计算遮挡住。
+        """
         if mask is not None:
             scaled_attention_logits += (mask * -1e9)
         attention_weights = softmax(scaled_attention_logits, axis=-1)
@@ -79,11 +91,15 @@ class MultiHeadAttention(Layer):
 
         return output, attention_weight
 
-
-class EncoderLayer(Layer):
+"""
+单层TransformerBlock:
+    MultiHeadAttention -> dropout -> LayerNormalization -> 
+    FFN -> dropout -> LayerNormalization
+"""
+class TransformerBlock(Layer):
 
     def __init__(self, num_heads, diff, d_model, rate=0.1):
-        super(EncoderLayer, self).__init__()
+        super(TransformerBlock, self).__init__()
 
         self.mth = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(diff, d_model)
@@ -103,7 +119,13 @@ class EncoderLayer(Layer):
 
         return output2
 
+"""
+Encoder :
+    1、输入向量embedding + positional_encoding
+    2、dropout
+    3、循环N次TransformerBlock
 
+"""
 class Encoder(tf.keras.layers.Layer):
     def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
         super(Encoder, self).__init__()
@@ -114,7 +136,7 @@ class Encoder(tf.keras.layers.Layer):
         self.embedding = Embedding(vocabulary_size, d_model)
         self.position_encoding = self.positional_encoding(vocabulary_size, d_model)
 
-        self.enc_layers = [EncoderLayer(num_heads, diff, d_model) for i in range(num_layers)]
+        self.enc_layers = [TransformerBlock(num_heads, diff, d_model) for i in range(num_layers)]
 
         self.dropout1 = Dropout(rate)
 
@@ -153,7 +175,13 @@ class Encoder(tf.keras.layers.Layer):
 
         return x  # (batch_size, input_seq_len, d_model)
 
-
+"""
+Transformer:
+    1、构建encoder
+    2、dropout
+    3、reshape [batch_size,output_shape]
+    4、Dense(2,"softmax")
+"""
 class Transformer(tf.keras.Model):
     def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
         super(Transformer, self).__init__()
@@ -176,22 +204,20 @@ class Transformer(tf.keras.Model):
 
         return ffn
 
-#构建transformer神经网络
-transformer = Transformer(gConfig['num_layers'],gConfig['embedding_size'],gConfig['diff'] ,gConfig['num_heads'],
-                          gConfig['vocabulary_size'],gConfig['dropout_rate'])
-# 优化器
-optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
-ckpt=tf.train.Checkpoint(transformer,optimizer)
-
-#填充长度不足的seq为-1e9
+"""
+填充长度不足的seq为-1e9
+"""
 def create_padding_mask(seq):
     seq=tf.cast(tf.math.equal(seq,0),tf.float32)
     return seq[:,np.newaxis,np.newaxis,:]  #(batch_size,1,1,seq_len)
 
+
+"""
+train
+"""
 def step(input,tar,train_status=True):
     mask=create_padding_mask(input)
-
-
+    #是否需要训练
     if train_status:
         with tf.GradientTape() as tape:
             predictions=transformer(input,True,mask)
@@ -208,9 +234,15 @@ def step(input,tar,train_status=True):
         return predictions
 
 
+gConfig = getConfig.get_config()
 
 
-
+#构建transformer神经网络
+transformer = Transformer(gConfig['num_layers'],gConfig['embedding_size'],gConfig['diff'] ,gConfig['num_heads'],
+                          gConfig['vocabulary_size'],gConfig['dropout_rate'])
+# 优化器
+optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
+ckpt=tf.train.Checkpoint(transformer,optimizer)
 
 
 
