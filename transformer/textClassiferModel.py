@@ -13,6 +13,7 @@ from tensorflow.losses import categorical_crossentropy
 
 """
 FFN:前馈神经网络
+2层神经网络
 """
 def point_wise_feed_forward_network(diff, d_model):
     return Sequential(
@@ -52,6 +53,10 @@ class MultiHeadAttention(Layer):
     def scaled_dot_product_attention(self, q, k, v, mask):
         matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., seq_len_q, seq_len_k)
 
+        """
+        dk为缩放因子
+        当 dk较大时，向量内积的值也会容易变得很大，这时 softmax 函数的梯度会非常的小
+        """
         dk = tf.cast(tf.shape(k)[-1], tf.float32)
         scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
@@ -230,6 +235,7 @@ def step(input,tar,train_status=True):
         optimizer.apply_gradients(zip(gradient,transformer.trainable_variables))
         return  loss
     else:
+        #预测
         predictions = transformer(input, False, mask)
         return predictions
 
