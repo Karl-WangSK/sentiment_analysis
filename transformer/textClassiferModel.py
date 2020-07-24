@@ -133,3 +133,4 @@ class Encoder(tf.keras.layers.Layer):
 
 
 
+
