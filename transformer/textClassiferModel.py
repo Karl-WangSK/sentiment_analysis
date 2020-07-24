@@ -2,11 +2,14 @@
 import tensorflow as tf
 import numpy as np
 from transformer import getConfig
-from tensorflow.keras.layers import Layer, Dense,Embedding
+from tensorflow.keras.layers import Layer, Dense, Embedding, Dropout, LayerNormalization
 from tensorflow.nn import softmax
 from tensorflow.keras import Sequential
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.utils import to_categorical
+from tensorflow.losses import categorical_crossentropy
 
-gConfig = {}
+
 gConfig = getConfig.get_config()
 
 
@@ -84,10 +87,10 @@ class EncoderLayer(Layer):
 
         self.mth = MultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(diff, d_model)
-        self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.dropout1 = Dropout(rate)
+        self.dropout2 = Dropout(rate)
+        self.layernorm1 = LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = LayerNormalization(epsilon=1e-6)
 
     def call(self, x, training, mask):
         attn_output, _ = self.mth(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
@@ -102,27 +105,107 @@ class EncoderLayer(Layer):
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self,num_layers,num_heads,d_model,diff,vocabulary_size,rate=0.1):
-        super(Encoder,self).__init__()
+    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
+        super(Encoder, self).__init__()
 
-        self.num_layers=num_layers
-        self.d_model=d_model
+        self.num_layers = num_layers
+        self.d_model = d_model
 
-        self.embedding=Embedding(vocabulary_size,d_model)
-        self.position_encoding=self.positional_encoding(vocabulary_size,d_model)
+        self.embedding = Embedding(vocabulary_size, d_model)
+        self.position_encoding = self.positional_encoding(vocabulary_size, d_model)
 
-    def get_angles(self,pos,i,d_model):
-        return
+        self.enc_layers = [EncoderLayer(num_heads, diff, d_model) for i in range(num_layers)]
+
+        self.dropout1 = Dropout(rate)
+
+    def get_angles(self, pos, i, d_model):
+        angle_rads = 1 / np.power(100000, (2 * i) / tf.float32(d_model))
+
+        return pos * angle_rads
+
+    def positional_encoding(self, position, d_model):
+        # 构建一个位置编码的向量， 维度和embedding相同
+        position_vec = np.zeros([position, d_model], dtype=float)
+
+        angle_out = self.get_angles(np.arange(position)[:, np.newaxis],
+                                    np.arange(0, d_model, 2)[np.newaxis, :],
+                                    d_model)
+
+        position_vec[:, 0::2] = np.sin(angle_out)
+        position_vec[:, 1::2] = np.cos(angle_out)
+        # 添加第0个维度
+        position_vec = position_vec[np.newaxis, ...]
+
+        return tf.cast(position_vec, tf.float32)
+
+    def call(self, x, training, mask):
+        seq_len = tf.shape(x)[1]
+
+        x = self.embedding(x)
+        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        # 添加位置编码
+        x += self.position_encoding[:, :seq_len, :]
+
+        x = self.dropout1(x, training)
+
+        for i in range(self.num_layers):
+            x = self.enc_layers[i](x, training, mask)
+
+        return x  # (batch_size, input_seq_len, d_model)
 
 
-    def positional_encoding(self,position,d_model):
-        angle_out=self.get_angles(np.arange(position)[:np.newaxis],
-                        np.arange(d_model)[np.newaxis:d_model],
-                        d_model)
+class Transformer(tf.keras.Model):
+    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
+        super(Transformer, self).__init__()
 
-        return 1
+        self.encoder = Encoder(num_layers, num_heads, d_model, diff, vocabulary_size)
+
+        self.ffn = Dense(2, activation='softmax')
+
+        self.dropout = Dropout(rate)
+
+    def call(self, input, training, enc_padding_mask):
+        x = self.encoder(input, training, enc_padding_mask)
+
+        out_shape = gConfig['sentence_size'] * gConfig['embedding_size']
+
+        out = tf.reshape(x, [-1, out_shape])
+
+        out = self.dropout(out, training)
+        ffn = self.ffn(out)
+
+        return ffn
+
+#构建transformer神经网络
+transformer = Transformer(gConfig['num_layers'],gConfig['embedding_size'],gConfig['diff'] ,gConfig['num_heads'],
+                          gConfig['vocabulary_size'],gConfig['dropout_rate'])
+# 优化器
+optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
+ckpt=tf.train.Checkpoint(transformer,optimizer)
+
+#填充长度不足的seq为-1e9
+def create_padding_mask(seq):
+    seq=tf.cast(tf.math.equal(seq,0),tf.float32)
+    return seq[:,np.newaxis,np.newaxis,:]  #(batch_size,1,1,seq_len)
+
+def step(input,tar,train_status=True):
+    mask=create_padding_mask(input)
 
 
+    if train_status:
+        with tf.GradientTape() as tape:
+            predictions=transformer(input,True,mask)
+            tar=to_categorical(tar,2)
+            loss=categorical_crossentropy(tar,predictions)
+            loss=tf.reduce_mean(loss)
+            print("训练损失数值为：",loss)
+
+        gradient=tape.gradient(loss,transformer.trainable_variables)
+        optimizer.apply_gradients(zip(gradient,transformer.trainable_variables))
+        return  loss
+    else:
+        predictions = transformer(input, False, mask)
+        return predictions
 
 
 

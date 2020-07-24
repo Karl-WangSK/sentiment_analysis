@@ -79,7 +79,7 @@ def prepare_custom_data(working_directory,train_pos,train_neg,test_pos,test_neg,
     vocab_path=os.path.join(working_directory,'vocab%d.txt'%vocabulary_size)
 
     #生成字典文件
-    create_vocabulary('all_data.txt',vocabulary_size,vocab_path)
+    create_vocabulary(all_data,vocabulary_size,vocab_path)
 
     #读取训练数据并转化为向量
     _train_pos=convert_to_vector(train_pos,vocab_path)
