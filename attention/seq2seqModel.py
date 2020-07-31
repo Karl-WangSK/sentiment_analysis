@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import GRU, Dense, Embedding
 from attention.getConfig import get_config
+
 class Encoder(Model):
     def __init__(self, enc_hidden, batch_size, embedding_dim, vocab_size):
         super(Encoder, self).__init__()
@@ -158,6 +159,10 @@ def train_step(inp, targ, targ_lang, enc_hidden):
 
 
 def loss_function(real, pred):
+    mask=tf.math.not_equal(tf.equal(real,0))
+    mask=tf.cast(mask,dtype=tf.float32)
+
     loss = sparse_loss(real, pred)
+    loss=loss*mask
 
     return loss.numpy()
