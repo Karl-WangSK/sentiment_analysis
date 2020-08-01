@@ -2,11 +2,10 @@
 import tensorflow as tf
 import numpy as np
 from transformer import getConfig
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 from transformer import textClassiferModel as model
-from tensorflow.data import Dataset
 import time
-
+from transformer.data_util import get_train_test,reverse_token
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 #config
 gConfig = getConfig.get_config()
@@ -32,8 +31,8 @@ def read_npz(data_file):
 对输出向量长度补齐 padding为0
 """
 
-def pad_sequences(input):
-    return pad_sequences(input, maxlen=sentence_size, padding='pre', truncating='post')
+def pad_sequence(input):
+    return pad_sequences(input, maxlen=236, padding='pre', truncating='post')
 
 
 
@@ -41,6 +40,9 @@ def pad_sequences(input):
 构建transformer模型
 """
 def create_model():
+    if not tf.io.gfile.exists(model_dir):
+        tf.io.gfile.makedirs(model_dir)
+
     ckpt = tf.io.gfile.listdir(model_dir)
     # 查看检查点
     if ckpt:
@@ -64,8 +66,8 @@ params:
 def train(train_data,ckpt_manager):
     model = create_model()
 
-    for epoch in range(gConfig.get('epoch')):
-        for batch, (x, y) in enumerate(train_data.train(gConfig.get("batch_size"))):
+    for epoch in range(gConfig['epochs']):
+        for batch, (x, y) in enumerate(train_data.batch(gConfig['batch_size'])):
             start = time.time()
             loss = model.step(x, y)
             print('训练集:Epoch {:} ,Batch {:} ,Loss {:.4f},Prestep {:.4f}'.format(epoch, batch, loss.numpy(),
@@ -81,7 +83,7 @@ def train(train_data,ckpt_manager):
 """
 def convert_to_vec(input):
     vocab_tmp = []
-    with open(gConfig.get('vocabulary_file'), 'r') as f:
+    with open(gConfig['vocabulary_file'], 'r') as f:
         vocab_tmp.extend(f.readlines())
     vocab_tmp = [word.strip() for word in vocab_tmp]
     vocab = dict([(y, x) for (x, y) in enumerate(vocab_tmp)])
@@ -115,15 +117,18 @@ def predict(sentences):
     return state[pre_index]
 
 if __name__ == '__main__':
-    # 获取训练测试数据
-    x_train, y_train, x_test, y_test = read_npz(gConfig.get('npz_data'))
-    # padding
-    x_train = pad_sequences(x_train)
-    x_test = pad_sequences(x_test)
+    train_pad,train_target=get_train_test()
+
+    # 切分训练数据和测试数据
+    from sklearn.model_selection import train_test_split
+
+    x_train, x_test, y_train, y_test = train_test_split(train_pad, train_target, test_size=0.1, random_state=123)
+    print(reverse_token(x_train[123]))
+    print(y_train[123])
 
     # 把数据和标签 组成dataset [(x,y),(x,y).....]
-    train_data = Dataset.from_tensor_slices((x_train, y_train)).shuffle(gConfig.get('shuffle_size'))
-    test_data = Dataset.from_tensor_slices((x_test, y_test)).shuffle(gConfig.get('shuffle_size'))
+    train_data = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(gConfig['shuffle_size'])
+    test_data = tf.data.Dataset.from_tensor_slices((x_test, y_test)).shuffle(gConfig['shuffle_size'])
 
     # ckpt manager
     ckpt_manager = tf.train.CheckpointManager(model.ckpt, model_dir, max_to_keep=5)

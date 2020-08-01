@@ -2,6 +2,10 @@
 import os
 import numpy as np
 from transformer import getConfig
+from gensim.models import KeyedVectors
+import jieba
+import re
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 #获取配置信息dict
 gConfig=getConfig.get_config()
@@ -10,6 +14,9 @@ gConfig=getConfig.get_config()
 UNK='__UNK__'
 START_VOCABULART=[UNK]
 UNK_ID=1
+
+num_words = gConfig['vocabulary_size']
+seq_len=gConfig['sentence_size']
 
 """
 词频词典的创建：
@@ -111,10 +118,94 @@ for i in range(len(test_neg)):
 x_train=np.concatenate((train_pos,train_neg),axis=0)
 x_test=np.concatenate((test_pos,test_neg),axis=0)
 
-np.savez("train_data/imdb.npz",x_train,y_train,x_test,y_test)
+
+"""
+获取知乎skip-gram词向量
+"""
+def get_embedding(path):
+    ##知乎词向量
+    cn_model = KeyedVectors.load_word2vec_format(path,
+                                                 binary=False)
+    print(cn_model['NLP'])
+    print(cn_model.most_similar(positive='卧槽'))
+    return cn_model
+
+"""
+获取数据集 并转换为index
+"""
+def get_train_tokens(cn_model):
+    pos = os.listdir('../pos')
+    neg = os.listdir('../neg')
+    ##样本数量
+    print("负样本数量:", len(neg))
+    print('len:', str(len(pos) + len(neg)))
+
+    ##训练数据集
+    train_texts_orig = []
+    for i in range(len(pos)):
+        with open('../pos/' + pos[i], 'r', errors='ignore') as f:
+            txt = re.sub('\\s+', '', f.read())
+            train_texts_orig.append(txt)
+            f.close()
+    for i in range(len(neg)):
+        with open('../neg/' + neg[i], 'r', errors='ignore') as f:
+            txt = re.sub('\\s+', '', f.read())
+            train_texts_orig.append(txt)
+            f.close()
+    print(len(train_texts_orig))
+
+    # 分词后的文本集
+    train_tokens = []
+    for text in train_texts_orig:
+        # 去掉标点
+        text = re.sub("[\s+\.\!\/_,$%^*(+\"\']+|[+——！，。？、~@￥%……&*（）]+", "", text)
+        cut = jieba.cut(text)
+
+        cut_list = [i for i in cut]
+        for index, word in enumerate(cut_list):
+            try:
+                cut_list[index] = cn_model.vocab[word].index
+            except KeyError:
+                cut_list[index] = 0
+        train_tokens.append(cut_list)
+    print(train_tokens[3])
+
+
+    return train_tokens
+
+
+ # index to word
+def reverse_token(token,cn_model):
+    text = ''
+    for i in token:
+        if i != 0:
+            text = text + cn_model.index2word[i]
+        else:
+            text = text + ''
+    return text
 
 
 
+def padding(train_tokens):
+    # padding
+    train_pad = pad_sequences(train_tokens, maxlen=seq_len, padding='pre', truncating='post')
+    train_pad[train_pad > num_words] = 0
+    print(train_pad[33])
 
+    return train_pad
 
+"""
+获取数据和label
+词袋化过的
+"""
+def get_train_test(model_path='../embedding/sgns.zhihu.bigram'):
+    #embedding
+    cn_model=get_embedding(model_path)
+    #get train data
+    train_tokens=get_train_tokens(cn_model)
+    #padding data
+    train_pad=padding(train_tokens)
+    #tar data
+    train_target = np.concatenate((np.ones(2000), np.zeros(2000)))
 
+    return train_pad,train_target

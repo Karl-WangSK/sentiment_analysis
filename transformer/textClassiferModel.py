@@ -3,11 +3,9 @@ import tensorflow as tf
 import numpy as np
 from transformer import getConfig
 from tensorflow.keras.layers import Layer, Dense, Embedding, Dropout, LayerNormalization
-from tensorflow.nn import softmax
 from tensorflow.keras import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
-from tensorflow.losses import categorical_crossentropy
 
 
 
@@ -46,7 +44,7 @@ class MultiHeadAttention(Layer):
 
     # 把Q,K,V分成 multi  head
     def split_head(self, x, batch_size):
-        x = tf.reshape(x, tf.shape(x)[:-1] + [self.num_heads, self.d_model // self.num_heads])
+        x = tf.reshape(x,  [batch_size,-1,self.num_heads, self.d_model // self.num_heads])
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     # Q K V 点积相乘
@@ -66,7 +64,7 @@ class MultiHeadAttention(Layer):
         """
         if mask is not None:
             scaled_attention_logits += (mask * -1e9)
-        attention_weights = softmax(scaled_attention_logits, axis=-1)
+        attention_weights = tf.nn.softmax(scaled_attention_logits,axis=-1)
 
         output = tf.matmul(attention_weights, v)  # (..., seq_len_k, d_model)
 
@@ -90,7 +88,7 @@ class MultiHeadAttention(Layer):
         # 合并最后2个维度
         a, b = tf.shape(scaled_attention)[-2:]
         combined_attention = tf.reshape(scaled_attention,
-                                        tf.shape(scaled_attention)[-2:] + [a * b])  # (batch_size, seq_len_k, d_model)
+                                        (batch_size,-1,self.d_model))  # (batch_size, seq_len_k, d_model)
 
         output = self.dense(combined_attention)
 
@@ -146,7 +144,7 @@ class Encoder(tf.keras.layers.Layer):
         self.dropout1 = Dropout(rate)
 
     def get_angles(self, pos, i, d_model):
-        angle_rads = 1 / np.power(100000, (2 * i) / tf.float32(d_model))
+        angle_rads = 1 / np.power(100000, (2 * i) / tf.cast(d_model,dtype=np.float))
 
         return pos * angle_rads
 
@@ -227,7 +225,7 @@ def step(input,tar,train_status=True):
         with tf.GradientTape() as tape:
             predictions=transformer(input,True,mask)
             tar=to_categorical(tar,2)
-            loss=categorical_crossentropy(tar,predictions)
+            loss=tf.losses.categorical_crossentropy(tar,predictions)
             loss=tf.reduce_mean(loss)
             print("训练损失数值为：",loss)
 
@@ -248,7 +246,7 @@ transformer = Transformer(gConfig['num_layers'],gConfig['embedding_size'],gConfi
                           gConfig['vocabulary_size'],gConfig['dropout_rate'])
 # 优化器
 optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
-ckpt=tf.train.Checkpoint(transformer,optimizer)
+ckpt=tf.train.Checkpoint(transformer=transformer,optimizer=optimizer)
 
 
 
