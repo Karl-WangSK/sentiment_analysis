@@ -4,8 +4,8 @@ import numpy as np
 from transformer import getConfig
 from transformer import textClassiferModel as model
 import time
-from transformer.data_util import get_train_test,reverse_token
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from transformer.data_util import get_train_test,reverse_token,padding
+from sklearn.model_selection import train_test_split
 
 #config
 gConfig = getConfig.get_config()
@@ -25,15 +25,6 @@ UNK_ID = 1
 def read_npz(data_file):
     r = np.load(data_file, allow_pickle=True)
     return r['arr_0'], r['arr_1'], r['arr_2'], r['arr_3']
-
-
-"""
-对输出向量长度补齐 padding为0
-"""
-
-def pad_sequence(input):
-    return pad_sequences(input, maxlen=236, padding='pre', truncating='post')
-
 
 
 """
@@ -105,7 +96,7 @@ def predict(sentences):
 
     # 将输入转化为vec，并做padding
     txt_vec = convert_to_vec(sentences)
-    txt_vec = pad_sequences([txt_vec])
+    txt_vec = padding([txt_vec])
     input = tf.reshape(txt_vec[0], [1, txt_vec[0]])
 
     # 预测结果
@@ -120,7 +111,6 @@ if __name__ == '__main__':
     train_pad,train_target=get_train_test()
 
     # 切分训练数据和测试数据
-    from sklearn.model_selection import train_test_split
 
     x_train, x_test, y_train, y_test = train_test_split(train_pad, train_target, test_size=0.1, random_state=123)
     print(reverse_token(x_train[123]))
