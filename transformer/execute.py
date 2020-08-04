@@ -2,10 +2,12 @@
 import tensorflow as tf
 import numpy as np
 from transformer import getConfig
-from transformer import textClassiferModel as model
+from transformer.textClassiferModel import *
 import time
-from transformer.data_util import get_train_test,reverse_token,padding
+from transformer.data_util import get_train_test,reverse_token,padding,load_embedding_matrix
 from sklearn.model_selection import train_test_split
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.utils import to_categorical
 
 #config
 gConfig = getConfig.get_config()
@@ -30,17 +32,18 @@ def read_npz(data_file):
 """
 构建transformer模型
 """
-def create_model():
+def create_model(model,ckpt):
     if not tf.io.gfile.exists(model_dir):
         tf.io.gfile.makedirs(model_dir)
 
-    ckpt = tf.io.gfile.listdir(model_dir)
+    ckpt_dir = tf.io.gfile.listdir(model_dir)
     # 查看检查点
-    if ckpt:
+    if ckpt_dir:
         print("restore model ")
-        model.ckpt.restore(tf.train.latest_checkpoint(model_dir))
+        ckpt.restore(tf.train.latest_checkpoint(model_dir))
         return model
     else:
+        # 构建transformer神经网络
         return model
 
 
@@ -54,18 +57,46 @@ params:
     train_data 训练数据
     ckpt_manager  模型保存
 """
-def train(train_data,ckpt_manager):
-    model = create_model()
+def train(train_data,embedding_matrix_weight,train_status=True):
+    transformer=Transformer(gConfig['num_layers'], gConfig['num_heads'], gConfig['embedding_size'], gConfig['diff'],
+                gConfig['vocabulary_size'], embedding_matrix_weight, gConfig['dropout_rate'])
 
+    # 优化器
+    optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
+    ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+    #create model
+    transformer = create_model(transformer,ckpt)
+
+    # ckpt manager
+    ckpt_manager = tf.train.CheckpointManager(ckpt, model_dir, max_to_keep=5)
+
+    #each epoch
     for epoch in range(gConfig['epochs']):
+
         for batch, (x, y) in enumerate(train_data.batch(gConfig['batch_size'])):
+
             start = time.time()
-            loss = model.step(x, y)
+            loss = 0
+            mask = create_padding_mask(input)
+            if train_status:
+                with tf.GradientTape() as tape:
+                    predictions = transformer(x, True, mask)
+                    tar = to_categorical(y, 2)
+
+                    loss = tf.losses.categorical_crossentropy(tar, predictions)
+                    loss = tf.reduce_mean(loss)
+
+                gradients = tape.gradient(loss, transformer.trainable_variables)
+                optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+            else:
+                # 预测
+                predictions = transformer(x, False, mask)
+
             print('训练集:Epoch {:} ,Batch {:} ,Loss {:.4f},Prestep {:.4f}'.format(epoch, batch, loss.numpy(),
                                                                                 (time.time() - start)))
-
-    ckpt_save_path = ckpt_manager.save()
-    print('保存epoch{}模型在 {}'.format(epoch, ckpt_save_path))
+        ckpt_save_path = ckpt_manager.save()
+        print('保存epoch{}模型在 {}'.format(epoch, ckpt_save_path))
 
 
 
@@ -108,21 +139,23 @@ def predict(sentences):
     return state[pre_index]
 
 if __name__ == '__main__':
-    train_pad,train_target=get_train_test()
+    train_pad,train_target,cn_model=get_train_test()
 
     # 切分训练数据和测试数据
 
     x_train, x_test, y_train, y_test = train_test_split(train_pad, train_target, test_size=0.1, random_state=123)
-    print(reverse_token(x_train[123]))
-    print(y_train[123])
+    print(reverse_token(x_train[123],cn_model))
+    print(x_train[123])
 
     # 把数据和标签 组成dataset [(x,y),(x,y).....]
     train_data = tf.data.Dataset.from_tensor_slices((x_train, y_train)).shuffle(gConfig['shuffle_size'])
     test_data = tf.data.Dataset.from_tensor_slices((x_test, y_test)).shuffle(gConfig['shuffle_size'])
 
-    # ckpt manager
-    ckpt_manager = tf.train.CheckpointManager(model.ckpt, model_dir, max_to_keep=5)
 
-    train(train_data=train_data,ckpt_manager=ckpt_manager)
+    print("batch/epoch: ",len(x_train)//gConfig['batch_size'])
+
+    embedding_matrix=load_embedding_matrix(cn_model,embedding_dim=300,num_words=vocab_size)
+
+    train(train_data=train_data,embedding_matrix_weight=embedding_matrix,train_status=True)
 
 
