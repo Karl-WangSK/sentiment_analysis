@@ -98,6 +98,7 @@ def prepare_custom_data(working_directory,train_pos,train_neg,test_pos,test_neg,
 
     return  _train_pos,_train_neg,_test_pos,_test_neg
 
+"""
 train_pos,train_neg,test_pos,test_neg=prepare_custom_data(gConfig['working_directory'],gConfig['train_pos_data'],gConfig['train_neg_data'],gConfig['test_pos_data'],gConfig['test_neg_data'],gConfig['all_data'],gConfig['vocabulary_size'])
 
 y_train=[]
@@ -117,7 +118,7 @@ for i in range(len(test_neg)):
 
 x_train=np.concatenate((train_pos,train_neg),axis=0)
 x_test=np.concatenate((test_pos,test_neg),axis=0)
-
+"""
 
 """
 获取知乎skip-gram词向量
@@ -143,16 +144,17 @@ def get_train_tokens(cn_model):
     ##训练数据集
     train_texts_orig = []
     for i in range(len(pos)):
-        with open('../pos/' + pos[i], 'r', errors='ignore') as f:
+        with open('../pos/' + pos[i], 'r', errors='ignore',encoding='gbk') as f:
             txt = re.sub('\\s+', '', f.read())
             train_texts_orig.append(txt)
             f.close()
     for i in range(len(neg)):
-        with open('../neg/' + neg[i], 'r', errors='ignore') as f:
+        with open('../neg/' + neg[i], 'r', errors='ignore',encoding='gbk') as f:
             txt = re.sub('\\s+', '', f.read())
             train_texts_orig.append(txt)
             f.close()
     print(len(train_texts_orig))
+    print(train_texts_orig[1])
 
     # 分词后的文本集
     train_tokens = []
@@ -208,4 +210,16 @@ def get_train_test(model_path='../embedding/sgns.zhihu.bigram'):
     #tar data
     train_target = np.concatenate((np.ones(2000), np.zeros(2000)))
 
-    return train_pad,train_target
+    return train_pad,train_target,cn_model
+
+"""
+    加载词向量中前50000个  
+    形成embedding matrix [num_words，embedding_dim]
+    """
+def load_embedding_matrix(cn_model,embedding_dim,num_words):
+
+    embedding_matrix = np.zeros((num_words, embedding_dim))
+    for i in range(num_words):
+        embedding_matrix[i:] = cn_model[cn_model.index2word[i]]
+    print(embedding_matrix.shape)
+    return embedding_matrix

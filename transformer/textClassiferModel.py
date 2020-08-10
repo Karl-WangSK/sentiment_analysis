@@ -8,6 +8,8 @@ from tensorflow.keras import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
 
+gConfig=getConfig.get_config()
+
 """
 FFN:前馈神经网络
 2层神经网络
@@ -33,7 +35,7 @@ class MultiHeadAttention(Layer):
         self.num_heads = num_heads
         self.d_model = d_model
 
-        assert self.d_model & self.num_heads == 0
+        assert self.d_model % self.num_heads == 0
 
         self.wq = Dense(self.d_model)
         self.wk = Dense(self.d_model)
@@ -129,13 +131,13 @@ Encoder :
 
 """
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
+    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size,embedding_matrix_weight, rate=0.1):
         super(Encoder, self).__init__()
 
         self.num_layers = num_layers
         self.d_model = d_model
 
-        self.embedding = Embedding(vocabulary_size, d_model)
+        self.embedding = Embedding(input_dim=vocabulary_size, output_dim=d_model,weights=[embedding_matrix_weight])
         self.position_encoding = self.positional_encoding(vocabulary_size, d_model)
 
         self.enc_layers = [TransformerBlock(num_heads, diff, d_model) for i in range(num_layers)]
@@ -185,10 +187,10 @@ Transformer:
     4、Dense(2,"softmax")
 """
 class Transformer(tf.keras.Model):
-    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size, rate=0.1):
+    def __init__(self, num_layers, num_heads, d_model, diff, vocabulary_size,embedding_matrix_weight, rate=0.1):
         super(Transformer, self).__init__()
 
-        self.encoder = Encoder(num_layers, num_heads, d_model, diff, vocabulary_size)
+        self.encoder = Encoder(num_layers, num_heads, d_model, diff, vocabulary_size,embedding_matrix_weight)
 
         self.ffn = Dense(2, activation='softmax')
 
@@ -214,38 +216,13 @@ def create_padding_mask(seq):
     return seq[:,np.newaxis,np.newaxis,:]  #(batch_size,1,1,seq_len)
 
 
-"""
-train
-"""
-def step(input,tar,train_status=True):
-    mask=create_padding_mask(input)
-    #是否需要训练
-    if train_status:
-        with tf.GradientTape() as tape:
-            predictions=transformer(input,True,mask)
-            tar=to_categorical(tar,2)
-            loss=tf.losses.categorical_crossentropy(tar,predictions)
-            loss=tf.reduce_mean(loss)
-            print("训练损失数值为：",loss)
-
-        gradient=tape.gradient(loss,transformer.trainable_variables)
-        optimizer.apply_gradients(zip(gradient,transformer.trainable_variables))
-        return  loss
-    else:
-        #预测
-        predictions = transformer(input, False, mask)
-        return predictions
 
 
-gConfig = getConfig.get_config()
 
 
-#构建transformer神经网络
-transformer = Transformer(gConfig['num_layers'],gConfig['embedding_size'],gConfig['diff'] ,gConfig['num_heads'],
-                          gConfig['vocabulary_size'],gConfig['dropout_rate'])
-# 优化器
-optimizer = Adam(learning_rate=gConfig.get('learning_rate'))
-ckpt=tf.train.Checkpoint(transformer=transformer,optimizer=optimizer)
+
+
+
 
 
 
