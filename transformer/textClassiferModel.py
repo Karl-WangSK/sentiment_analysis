@@ -1,4 +1,5 @@
 # coding=utf-8
+
 import tensorflow as tf
 import numpy as np
 from transformer import getConfig
@@ -6,8 +7,6 @@ from tensorflow.keras.layers import Layer, Dense, Embedding, Dropout, LayerNorma
 from tensorflow.keras import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
-
-
 
 """
 FFN:前馈神经网络
