@@ -5,8 +5,6 @@ import numpy as np
 from transformer import getConfig
 from tensorflow.keras.layers import Layer, Dense, Embedding, Dropout, LayerNormalization
 from tensorflow.keras import Sequential
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.utils import to_categorical
 
 gConfig=getConfig.get_config()
 
